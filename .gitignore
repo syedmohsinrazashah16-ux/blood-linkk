@@ -1,0 +1,45 @@
+# =========================
+# Node.js / Next.js / Firebase
+# =========================
+node_modules/
+.next/
+out/
+build/
+dist/
+.firebase/
+firebase-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment Variables (CRITICAL - NEVER UPLOAD THESE)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+serviceAccountKey.json
+
+# =========================
+# Python / Machine Learning
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+.pytest_cache/
+*.h5
+*.keras
+*.pkl
+
+# =========================
+# IDEs and OS Files
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
