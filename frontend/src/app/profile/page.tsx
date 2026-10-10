@@ -9,12 +9,12 @@ const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 export default function ProfileSetupPage() {
   const [bloodGroup, setBloodGroup] = useState("");
+  const [patientType, setPatientType] = useState<"THALASSEMIA" | "GENERAL">("GENERAL");
   const [role, setRole] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
 
-  // Fetch the user's role when the page loads
   useEffect(() => {
     const fetchUserRole = async () => {
       const user = auth.currentUser;
@@ -23,11 +23,16 @@ export default function ProfileSetupPage() {
         return;
       }
 
-      const userDoc = await getDoc(doc(db, "Users", user.uid));
-      if (userDoc.exists()) {
-        setRole(userDoc.data().role);
+      try {
+        const userDoc = await getDoc(doc(db, "Users", user.uid));
+        if (userDoc.exists()) {
+          setRole(userDoc.data().role);
+        }
+      } catch (error) {
+        console.error("Error fetching role:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchUserRole();
   }, [router]);
@@ -38,31 +43,33 @@ export default function ProfileSetupPage() {
     
     setSaving(true);
     const user = auth.currentUser;
-
     if (!user) return;
 
     try {
-      // Update the existing user document with the blood group
       await setDoc(doc(db, "Users", user.uid), {
         bloodGroup: bloodGroup,
+        patientType: role === "PATIENT" ? patientType : "NONE",
         profileCompleted: true,
       }, { merge: true });
 
-      // Redirect based on their role
       if (role === "PATIENT") {
-        router.push("/patient");
+        if (patientType === "THALASSEMIA") {
+          router.push("/schedule"); 
+        } else {
+          router.push("/patient"); 
+        }
       } else {
         router.push("/donor");
       }
     } catch (error) {
       console.error("Error saving profile: ", error);
-      alert("Failed to save profile. Please try again.");
+      alert("Failed to save profile.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading profile...</div>;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -74,9 +81,7 @@ export default function ProfileSetupPage() {
 
         <form onSubmit={handleSave} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Your Blood Group
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Your Blood Group</label>
             <select
               value={bloodGroup}
               onChange={(e) => setBloodGroup(e.target.value)}
@@ -89,6 +94,36 @@ export default function ProfileSetupPage() {
               ))}
             </select>
           </div>
+
+          {role === "PATIENT" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">What kind of patient are you?</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPatientType("THALASSEMIA")}
+                  className={`p-3 rounded-lg border-2 text-center transition-all ${
+                    patientType === "THALASSEMIA" 
+                      ? "border-red-500 bg-red-50 text-red-700 font-bold" 
+                      : "border-gray-200 bg-white text-gray-600"
+                  }`}
+                >
+                  Thalassemia Major
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPatientType("GENERAL")}
+                  className={`p-3 rounded-lg border-2 text-center transition-all ${
+                    patientType === "GENERAL" 
+                      ? "border-red-500 bg-red-50 text-red-700 font-bold" 
+                      : "border-gray-200 bg-white text-gray-600"
+                  }`}
+                >
+                  General (Surgery, Accident)
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
