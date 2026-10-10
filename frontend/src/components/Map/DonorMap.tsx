@@ -5,11 +5,11 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { db, auth } from "@/lib/firebase";
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
 // Haversine formula to calculate distance in km
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of Earth in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a =
@@ -17,7 +17,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in km
+  return R * c;
 }
 
 const customIcon = new L.Icon({
@@ -32,72 +32,59 @@ const customIcon = new L.Icon({
 
 interface DonorMapProps {
   userBloodGroup: string;
-  onRankedDonors?: (donors: any[]) => void; // Callback to send ranked list up
+  onRankedDonors?: (donors: any[]) => void;
   center?: [number, number];
   zoom?: number;
 }
 
-export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.4212, 70.2989], zoom = 13 }: DonorMapProps) {
+export default function DonorMap({
+  userBloodGroup,
+  onRankedDonors,
+  center = [28.4212, 70.2989],
+  zoom = 13,
+}: DonorMapProps) {
   const [donors, setDonors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Patient's location (for now, use map center. Later we will use real GPS)
   const patientLat = center[0];
   const patientLng = center[1];
 
   useEffect(() => {
-    const fetchDonors = async () => {
-      if (!userBloodGroup) return;
-      
-      try {
-            const q = query(
-          collection(db, "Users"),
-          where("role", "==", "DONOR"),
-          where("bloodGroup", "==", userBloodGroup),
-          where("availabilityStatus", "==", true) // Only show available donors
-        );
+    if (!userBloodGroup) return;
 
-        const querySnapshot = await getDocs(q);
+    // Real-time listener for available donors matching the blood group
+    const q = query(
+      collection(db, "Users"),
+      where("role", "==", "DONOR"),
+      where("bloodGroup", "==", userBloodGroup),
+      where("availabilityStatus", "==", true)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
         const donorList: any[] = [];
-        
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          // Skip donors without coordinates
           if (!data.latitude || !data.longitude) return;
-
-          // Calculate distance
-          const distance = calculateDistance(
-            patientLat, 
-            patientLng, 
-            data.latitude, 
-            data.longitude
-          );
-
-          donorList.push({ 
-            id: doc.id, 
-            ...data, 
-            distance: parseFloat(distance.toFixed(2)) // Round to 2 decimal places
+          const distance = calculateDistance(patientLat, patientLng, data.latitude, data.longitude);
+          donorList.push({
+            id: doc.id,
+            ...data,
+            distance: parseFloat(distance.toFixed(2)),
           });
         });
-
-        // Sort donors by distance (closest first)
         donorList.sort((a, b) => a.distance - b.distance);
-
         setDonors(donorList);
-        
-        // Send the ranked list up to the parent page
-        if (onRankedDonors) {
-          onRankedDonors(donorList);
-        }
-
-      } catch (error) {
+        if (onRankedDonors) onRankedDonors(donorList);
+        setLoading(false);
+      },
+      (error) => {
         console.error("Error fetching donors: ", error);
-      } finally {
         setLoading(false);
       }
-    };
+    );
 
-    fetchDonors();
+    return () => unsubscribe();
   }, [userBloodGroup, patientLat, patientLng, onRankedDonors]);
 
   const handleRequest = async (donorId: string, donorName: string) => {
@@ -116,7 +103,6 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
         status: "PENDING",
         createdAt: serverTimestamp(),
       });
-      
       alert(`✅ Request sent to ${donorName}! They will be notified.`);
     } catch (error) {
       console.error("Error sending request: ", error);
@@ -131,7 +117,7 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
           Searching for {userBloodGroup} donors...
         </div>
       )}
-      
+
       <MapContainer
         center={center}
         zoom={zoom}
@@ -156,7 +142,7 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
                 <p className="text-gray-600 text-sm mt-1">
                   📍 Distance: <span className="font-semibold">{donor.distance} km</span>
                 </p>
-                <button 
+                <button
                   onClick={() => handleRequest(donor.id, donor.name)}
                   className="mt-3 w-full bg-red-600 text-white py-2 px-3 rounded text-sm hover:bg-red-700 transition-colors"
                 >

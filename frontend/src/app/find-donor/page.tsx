@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
 const DonorMap = dynamic(() => import("@/components/Map/DonorMap"), {
@@ -23,29 +24,40 @@ export default function FindDonorPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      const user = auth.currentUser;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push("/login");
         return;
       }
-
-      const userDoc = await getDoc(doc(db, "Users", user.uid));
-      if (userDoc.exists()) {
-        setBloodGroup(userDoc.data().bloodGroup || "");
+      try {
+        const userDoc = await getDoc(doc(db, "Users", user.uid));
+        if (userDoc.exists()) {
+          setBloodGroup(userDoc.data().bloodGroup || "");
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    };
-    fetchUserProfile();
+    });
+    return () => unsubscribe();
   }, [router]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading profile...</div>;
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading profile...
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-red-600 text-white p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold">Find a Donor</h1>
-        <Link href="/patient" className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-lg text-sm transition-colors">
+        <Link
+          href="/patient"
+          className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-lg text-sm transition-colors"
+        >
           Back to Dashboard
         </Link>
       </header>
@@ -73,25 +85,23 @@ export default function FindDonorPage() {
           ) : (
             <div className="space-y-3">
               {rankedDonors.map((donor, index) => (
-                <div key={donor.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div
+                  key={donor.id}
+                  className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100"
+                >
                   <div className="flex items-center gap-4">
                     <span className="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
                       {index + 1}
                     </span>
                     <div>
-                      <p className="font-semibold text-gray-800">{donor.name || "Anonymous Donor"}</p>
-                      <p className="text-sm text-gray-500">{donor.bloodGroup} • {donor.distance} km away</p>
+                      <p className="font-semibold text-gray-800">
+                        {donor.name || "Anonymous Donor"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {donor.bloodGroup} • {donor.distance} km away
+                      </p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => {
-                      // Trigger the request from the map component (or handle it here)
-                      alert(`Please click the donor's marker on the map to send a request.`);
-                    }}
-                    className="text-red-600 font-semibold text-sm hover:underline"
-                  >
-                    View on Map
-                  </button>
                 </div>
               ))}
             </div>

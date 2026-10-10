@@ -14,13 +14,14 @@ export default function PatientDashboard() {
   const [userName, setUserName] = useState<string>("Patient");
 
   useEffect(() => {
-    // Safety timeout: If Firebase doesn't respond in 5 seconds, stop loading
+    // Safety timeout: If Firebase takes too long, stop showing loading
     const timeout = setTimeout(() => {
       setLoading(false);
     }, 5000);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
+        // Only redirect if Firebase is SURE we are logged out
         router.push("/login");
         return;
       }
@@ -70,7 +71,10 @@ export default function PatientDashboard() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <span>🩸</span> Blood-Link
         </h1>
-        <button onClick={handleLogout} className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-lg text-sm transition-colors">
+        <button
+          onClick={handleLogout}
+          className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-lg text-sm transition-colors"
+        >
           Logout
         </button>
       </header>
