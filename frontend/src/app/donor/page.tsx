@@ -4,33 +4,36 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
 
 export default function DonorDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const router = useRouter();
 
-  // 1. Wait for Firebase to confirm if the user is logged in
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        // If Firebase definitively says "no user", redirect to login
         router.push("/login");
       } else {
-        // User is logged in, save them to state
         setUser(currentUser);
+        
+        // Fetch the donor's current availability status
+        const userDoc = await getDoc(doc(db, "Users", currentUser.uid));
+        if (userDoc.exists()) {
+          setIsAvailable(userDoc.data().availabilityStatus || false);
+        }
       }
     });
     return () => unsubscribe();
   }, [router]);
 
-  // 2. Fetch incoming requests ONLY after we know the user is loaded
   useEffect(() => {
     const fetchRequests = async () => {
       if (!user) return;
-
       try {
         const q = query(
           collection(db, "BloodRequests"),
@@ -39,9 +42,7 @@ export default function DonorDashboard() {
         );
         const querySnapshot = await getDocs(q);
         const reqList: any[] = [];
-        querySnapshot.forEach((doc) => {
-          reqList.push({ id: doc.id, ...doc.data() });
-        });
+        querySnapshot.forEach((doc) => reqList.push({ id: doc.id, ...doc.data() }));
         setRequests(reqList);
       } catch (error) {
         console.error("Error fetching requests: ", error);
@@ -49,16 +50,29 @@ export default function DonorDashboard() {
         setLoading(false);
       }
     };
-
     fetchRequests();
-  }, [user]); // This runs whenever 'user' state updates
+  }, [user]);
 
-  // 3. Handle Accept or Decline
+  const toggleAvailability = async () => {
+    if (!user) return;
+    setToggling(true);
+    const newStatus = !isAvailable;
+    try {
+      await updateDoc(doc(db, "Users", user.uid), {
+        availabilityStatus: newStatus,
+      });
+      setIsAvailable(newStatus);
+    } catch (error) {
+      console.error("Error toggling availability:", error);
+      alert("Failed to update status.");
+    } finally {
+      setToggling(false);
+    }
+  };
+
   const handleResponse = async (requestId: string, newStatus: "ACCEPTED" | "DECLINED") => {
     try {
-      await updateDoc(doc(db, "BloodRequests", requestId), {
-        status: newStatus,
-      });
+      await updateDoc(doc(db, "BloodRequests", requestId), { status: newStatus });
       setRequests(requests.filter((req) => req.id !== requestId));
       alert(`Request ${newStatus.toLowerCase()}!`);
     } catch (error) {
@@ -80,15 +94,39 @@ export default function DonorDashboard() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <span>💪</span> Donor Dashboard
         </h1>
-        <button 
-          onClick={handleLogout}
-          className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors"
-        >
+        <button onClick={handleLogout} className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors">
           Logout
         </button>
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
+        {/* Availability Toggle Card */}
+        <div className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${isAvailable ? 'bg-green-50 border-green-500' : 'bg-white border-gray-300'}`}>
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">
+                {isAvailable ? "🟢 You are Available" : "🔴 You are Busy"}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {isAvailable 
+                  ? "Patients nearby can see you on the map and send requests." 
+                  : "Your location is hidden. You won't receive new requests."}
+              </p>
+            </div>
+            <button
+              onClick={toggleAvailability}
+              disabled={toggling}
+              className={`px-6 py-3 rounded-lg font-bold transition-colors ${
+                isAvailable 
+                  ? "bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
+            >
+              {toggling ? "Updating..." : isAvailable ? "Go Busy" : "Go Available"}
+            </button>
+          </div>
+        </div>
+
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Incoming Blood Requests</h2>
 
         {requests.length === 0 ? (
@@ -107,18 +145,8 @@ export default function DonorDashboard() {
                   <p className="text-xs text-gray-400 mt-2">Request ID: {request.id}</p>
                 </div>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => handleResponse(request.id, "ACCEPTED")}
-                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => handleResponse(request.id, "DECLINED")}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    Decline
-                  </button>
+                  <button onClick={() => handleResponse(request.id, "ACCEPTED")} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors">Accept</button>
+                  <button onClick={() => handleResponse(request.id, "DECLINED")} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-semibold transition-colors">Decline</button>
                 </div>
               </div>
             ))}

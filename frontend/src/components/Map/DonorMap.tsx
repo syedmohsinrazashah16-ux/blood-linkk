@@ -50,10 +50,11 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
       if (!userBloodGroup) return;
       
       try {
-        const q = query(
+            const q = query(
           collection(db, "Users"),
           where("role", "==", "DONOR"),
-          where("bloodGroup", "==", userBloodGroup)
+          where("bloodGroup", "==", userBloodGroup),
+          where("availabilityStatus", "==", true) // Only show available donors
         );
 
         const querySnapshot = await getDocs(q);
