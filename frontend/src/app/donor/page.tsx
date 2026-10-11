@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, updateDoc, getDoc, orderBy } from "firebase/firestore";
 
 export default function DonorDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -35,17 +35,27 @@ export default function DonorDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, "BloodRequests"),
-      where("donorId", "==", user.uid),
-      where("status", "==", "PENDING")
+
+    // Fetch ALL requests, then filter client-side (matches UID OR phone number)
+    const unsub = onSnapshot(
+      query(collection(db, "BloodRequests"), orderBy("createdAt", "desc")),
+      (snapshot) => {
+        const reqList: any[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const matchesUID = data.donorId === user.uid;
+          const matchesPhone =
+            user.phoneNumber && data.donorPhone && data.donorPhone === user.phoneNumber;
+          const isActive = data.status === "PENDING" || data.status === "APPROVED";
+
+          if ((matchesUID || matchesPhone) && isActive) {
+            reqList.push({ id: docSnap.id, ...data });
+          }
+        });
+        setRequests(reqList);
+      }
     );
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const reqList: any[] = [];
-      querySnapshot.forEach((doc) => reqList.push({ id: doc.id, ...doc.data() }));
-      setRequests(reqList);
-    });
-    return () => unsubscribe();
+    return () => unsub();
   }, [user]);
 
   const toggleAvailability = async () => {
@@ -93,35 +103,22 @@ export default function DonorDashboard() {
           <span>💪</span> Donor Dashboard
         </h1>
         <div className="flex gap-3 items-center">
-          <Link
-            href="/leaderboard"
-            className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          >
+          <Link href="/leaderboard" className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
             🏆 Leaderboard
           </Link>
           {role === "ADMIN" && (
-            <Link
-              href="/admin"
-              className="bg-gray-800 hover:bg-gray-900 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-            >
+            <Link href="/admin" className="bg-gray-800 hover:bg-gray-900 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
               🏥 Admin
             </Link>
           )}
-          <button
-            onClick={handleLogout}
-            className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors"
-          >
+          <button onClick={handleLogout} className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors">
             Logout
           </button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
-        <div
-          className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${
-            isAvailable ? "bg-green-50 border-green-500" : "bg-white border-gray-300"
-          }`}
-        >
+        <div className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${isAvailable ? "bg-green-50 border-green-500" : "bg-white border-gray-300"}`}>
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-bold text-gray-800">
@@ -162,14 +159,29 @@ export default function DonorDashboard() {
             {requests.map((request) => (
               <div
                 key={request.id}
-                className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500 flex flex-col md:flex-row justify-between items-center gap-4"
+                className={`bg-white rounded-xl shadow-sm p-6 border-l-4 flex flex-col md:flex-row justify-between items-center gap-4 ${
+                  request.status === "APPROVED" ? "border-green-600" : "border-red-500"
+                }`}
               >
-                <div>
-                  <h3 className="text-lg font-bold text-gray-800">Blood Request</h3>
-                  <p className="text-gray-600 text-sm mt-1">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800">Blood Request</h3>
+                    <span
+                      className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        request.status === "APPROVED"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {request.status}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 text-sm">
                     A patient with your blood group needs your help.
                   </p>
-                  <p className="text-xs text-gray-400 mt-2">Request ID: {request.id}</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Request #{request.id.substring(0, 8)}
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <button

@@ -110,14 +110,17 @@ export default function PatientDashboard() {
             </Link>
           )}
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 h-full opacity-60">
-            <div className="text-3xl mb-3">📋</div>
-            <h3 className="text-lg font-bold text-gray-800 mb-2">Request History</h3>
-            <p className="text-gray-600 text-sm mb-4">
-              View your past blood requests and their status.
-            </p>
-            <span className="text-blue-600 font-semibold text-sm">Coming soon — Phase 3</span>
-          </div>
+          {/* NOW CLICKABLE — Request History */}
+          <Link href="/my-requests" className="block group">
+            <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 h-full transition-all group-hover:shadow-md group-hover:-translate-y-1">
+              <div className="text-3xl mb-3">📋</div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Request History</h3>
+              <p className="text-gray-600 text-sm mb-4">
+                View your past blood requests and their live status.
+              </p>
+              <span className="text-blue-600 font-semibold text-sm">View Requests →</span>
+            </div>
+          </Link>
 
           <Link href="/profile" className="block group">
             <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500 h-full transition-all group-hover:shadow-md group-hover:-translate-y-1">
