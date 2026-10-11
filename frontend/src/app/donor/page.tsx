@@ -13,6 +13,7 @@ export default function DonorDashboard() {
   const [user, setUser] = useState<any>(null);
   const [isAvailable, setIsAvailable] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [role, setRole] = useState<string>("DONOR");
   const router = useRouter();
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function DonorDashboard() {
         const userDoc = await getDoc(doc(db, "Users", currentUser.uid));
         if (userDoc.exists()) {
           setIsAvailable(userDoc.data().availabilityStatus || false);
+          setRole(userDoc.data().role || "DONOR");
         }
         setLoading(false);
       }
@@ -90,11 +92,21 @@ export default function DonorDashboard() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <span>💪</span> Donor Dashboard
         </h1>
-        <div className="flex gap-3">
-          {/* NEW LEADERBOARD BUTTON */}
-          <Link href="/leaderboard" className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+        <div className="flex gap-3 items-center">
+          <Link
+            href="/leaderboard"
+            className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
             🏆 Leaderboard
           </Link>
+          {role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className="bg-gray-800 hover:bg-gray-900 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            >
+              🏥 Admin
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors"
@@ -105,7 +117,11 @@ export default function DonorDashboard() {
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
-        <div className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${isAvailable ? "bg-green-50 border-green-500" : "bg-white border-gray-300"}`}>
+        <div
+          className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${
+            isAvailable ? "bg-green-50 border-green-500" : "bg-white border-gray-300"
+          }`}
+        >
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-bold text-gray-800">
