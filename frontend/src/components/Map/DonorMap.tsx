@@ -69,9 +69,10 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
     return () => unsubscribe();
   }, [userBloodGroup, patientLat, patientLng, onRankedDonors]);
 
-  const handleRequest = async (donorId: string, donorName: string) => {
+   const handleRequest = async (donorId: string, donorName: string) => {
     const patient = auth.currentUser;
     if (!patient) return alert("You must be logged in to request blood.");
+    
     try {
       await addDoc(collection(db, "BloodRequests"), {
         patientId: patient.uid,
@@ -82,9 +83,9 @@ export default function DonorMap({ userBloodGroup, onRankedDonors, center = [28.
         createdAt: serverTimestamp(),
       });
       alert(`✅ Request sent to ${donorName}! They will be notified.`);
-    } catch (error) {
-      console.error("Error sending request: ", error);
-      alert("Failed to send request.");
+    } catch (error: any) {
+      console.error("FULL ERROR: ", error);
+      alert(`Failed to send request: ${error.message}`);
     }
   };
 
