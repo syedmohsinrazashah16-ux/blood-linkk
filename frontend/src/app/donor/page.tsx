@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
@@ -14,7 +15,6 @@ export default function DonorDashboard() {
   const [toggling, setToggling] = useState(false);
   const router = useRouter();
 
-  // Wait for Firebase to confirm login
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -31,22 +31,18 @@ export default function DonorDashboard() {
     return () => unsubscribe();
   }, [router]);
 
-  // Real-time listener for incoming requests
   useEffect(() => {
     if (!user) return;
-
     const q = query(
       collection(db, "BloodRequests"),
       where("donorId", "==", user.uid),
       where("status", "==", "PENDING")
     );
-
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const reqList: any[] = [];
       querySnapshot.forEach((doc) => reqList.push({ id: doc.id, ...doc.data() }));
       setRequests(reqList);
     });
-
     return () => unsubscribe();
   }, [user]);
 
@@ -59,7 +55,6 @@ export default function DonorDashboard() {
       setIsAvailable(newStatus);
     } catch (error) {
       console.error("Error toggling availability:", error);
-      alert("Failed to update status.");
     } finally {
       setToggling(false);
     }
@@ -95,16 +90,21 @@ export default function DonorDashboard() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <span>💪</span> Donor Dashboard
         </h1>
-        <button
-          onClick={handleLogout}
-          className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors"
-        >
-          Logout
-        </button>
+        <div className="flex gap-3">
+          {/* NEW LEADERBOARD BUTTON */}
+          <Link href="/leaderboard" className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+            🏆 Leaderboard
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="bg-blue-900 hover:bg-blue-950 px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
-        {/* Availability Toggle */}
         <div className={`rounded-xl shadow-sm p-6 mb-6 border-l-4 ${isAvailable ? "bg-green-50 border-green-500" : "bg-white border-gray-300"}`}>
           <div className="flex justify-between items-center">
             <div>
