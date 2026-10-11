@@ -5,58 +5,87 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { collection, query, onSnapshot, doc, updateDoc, getDoc, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, getDoc, query } from "firebase/firestore";
 
 export default function DonorDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [donorProfile, setDonorProfile] = useState<any>(null);
   const [isAvailable, setIsAvailable] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [role, setRole] = useState<string>("DONOR");
   const router = useRouter();
 
+  // Load user + donor profile
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         router.push("/login");
-      } else {
-        setUser(currentUser);
+        return;
+      }
+      setUser(currentUser);
+      try {
         const userDoc = await getDoc(doc(db, "Users", currentUser.uid));
         if (userDoc.exists()) {
-          setIsAvailable(userDoc.data().availabilityStatus || false);
-          setRole(userDoc.data().role || "DONOR");
+          const profile: any = { id: userDoc.id, ...userDoc.data() };
+          setDonorProfile(profile);
+          setIsAvailable(profile.availabilityStatus || false);
+          setRole(profile.role || "DONOR");
         }
+      } catch (err) {
+        console.error("Error loading donor profile:", err);
+      } finally {
         setLoading(false);
       }
     });
     return () => unsubscribe();
   }, [router]);
 
+  // Load and match requests
   useEffect(() => {
-    if (!user) return;
+    if (!user || !donorProfile) return;
 
-    // Fetch ALL requests, then filter client-side (matches UID OR phone number)
-    const unsub = onSnapshot(
-      query(collection(db, "BloodRequests"), orderBy("createdAt", "desc")),
-      (snapshot) => {
-        const reqList: any[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const matchesUID = data.donorId === user.uid;
-          const matchesPhone =
-            user.phoneNumber && data.donorPhone && data.donorPhone === user.phoneNumber;
-          const isActive = data.status === "PENDING" || data.status === "APPROVED";
+    const unsub = onSnapshot(query(collection(db, "BloodRequests")), (snapshot) => {
+      const myRequests: any[] = [];
 
-          if ((matchesUID || matchesPhone) && isActive) {
-            reqList.push({ id: docSnap.id, ...data });
-          }
-        });
-        setRequests(reqList);
-      }
-    );
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const statusOk = data.status === "PENDING" || data.status === "APPROVED";
+        if (!statusOk) return;
+
+        // Match by any of these (resilient to data mismatches)
+        const matchesUID =
+          data.donorId === user.uid ||
+          data.donorId === donorProfile.id ||
+          data.donorId === donorProfile.userId;
+
+        const matchesPhone =
+          (data.donorPhone && data.donorPhone === user.phoneNumber) ||
+          (data.donorPhone && donorProfile.phoneNumber && data.donorPhone === donorProfile.phoneNumber);
+
+        const matchesName =
+          data.donorName && donorProfile.name && data.donorName === donorProfile.name;
+
+        if (matchesUID || matchesPhone || matchesName) {
+          myRequests.push({ id: docSnap.id, ...data });
+        }
+      });
+
+      console.log("=== DONOR DEBUG ===");
+      console.log("My UID:", user.uid);
+      console.log("My Phone:", user.phoneNumber);
+      console.log("My Profile:", donorProfile);
+      console.log("Matched Requests:", myRequests);
+      console.log("===================");
+
+      setRequests(myRequests);
+    }, (error) => {
+      console.error("onSnapshot error:", error);
+    });
+
     return () => unsub();
-  }, [user]);
+  }, [user, donorProfile]);
 
   const toggleAvailability = async () => {
     if (!user) return;
@@ -134,9 +163,7 @@ export default function DonorDashboard() {
               onClick={toggleAvailability}
               disabled={toggling}
               className={`px-6 py-3 rounded-lg font-bold transition-colors ${
-                isAvailable
-                  ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  : "bg-green-600 text-white hover:bg-green-700"
+                isAvailable ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-green-600 text-white hover:bg-green-700"
               }`}
             >
               {toggling ? "Updating..." : isAvailable ? "Go Busy" : "Go Available"}
@@ -166,18 +193,14 @@ export default function DonorDashboard() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="text-lg font-bold text-gray-800">Blood Request</h3>
-                    <span
-                      className={`text-xs font-bold px-2 py-1 rounded-full ${
-                        request.status === "APPROVED"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      request.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                    }`}>
                       {request.status}
                     </span>
                   </div>
                   <p className="text-gray-600 text-sm">
-                    A patient with your blood group needs your help.
+                    A patient needs your help. Please accept if you are available.
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Request #{request.id.substring(0, 8)}

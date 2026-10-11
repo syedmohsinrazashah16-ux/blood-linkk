@@ -5,13 +5,19 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 export default function MyRequestsPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
+
+  // Safety timeout so we never get stuck on "Loading..."
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoading(false), 5000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -27,35 +33,39 @@ export default function MyRequestsPage() {
   useEffect(() => {
     if (!user) return;
 
+    // No orderBy — we sort client side to avoid index requirement
     const q = query(
       collection(db, "BloodRequests"),
-      where("patientId", "==", user.uid),
-      orderBy("createdAt", "desc")
+      where("patientId", "==", user.uid)
     );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      const reqList: any[] = [];
-      snapshot.forEach((docSnap) => {
-        reqList.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      setRequests(reqList);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const reqList: any[] = [];
+        snapshot.forEach((docSnap) => {
+          reqList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+
+        // Sort newest first
+        reqList.sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+          const bTime = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+          return bTime.getTime() - aTime.getTime();
+        });
+
+        setRequests(reqList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error loading my requests:", error);
+        setLoading(false);
+      }
+    );
+
     return () => unsub();
   }, [user]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your requests...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Status → display config
   const getStatusStyle = (status: string) => {
     switch (status) {
       case "PENDING":
@@ -73,12 +83,21 @@ export default function MyRequestsPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your requests...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-red-600 text-white p-4 shadow-md flex justify-between items-center">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          📋 My Blood Requests
-        </h1>
+        <h1 className="text-xl font-bold flex items-center gap-2">📋 My Blood Requests</h1>
         <Link
           href="/patient"
           className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-lg text-sm transition-colors"
@@ -107,10 +126,7 @@ export default function MyRequestsPage() {
             {requests.map((req) => {
               const style = getStatusStyle(req.status);
               return (
-                <div
-                  key={req.id}
-                  className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-                >
+                <div key={req.id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <p className="text-xs text-gray-400 font-semibold uppercase">
@@ -120,29 +136,17 @@ export default function MyRequestsPage() {
                         {req.donorName || "Unknown Donor"}
                       </h3>
                     </div>
-                    <span
-                      className={`text-xs font-bold px-3 py-1.5 rounded-full ${style.bg} ${style.text}`}
-                    >
+                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${style.bg} ${style.text}`}>
                       {style.label}
                     </span>
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
-                    {req.status === "PENDING" && (
-                      <p>Your request has been sent to the donor. Waiting for their response.</p>
-                    )}
-                    {req.status === "APPROVED" && (
-                      <p>The blood bank admin approved this request. The donor will be notified.</p>
-                    )}
-                    {req.status === "ACCEPTED" && (
-                      <p>🎉 The donor accepted your request. Please contact them to arrange the donation.</p>
-                    )}
-                    {req.status === "DECLINED" && (
-                      <p>The request was declined. Try finding another donor on the map.</p>
-                    )}
-                    {req.status === "COMPLETED" && (
-                      <p>This donation has been completed. Thank you!</p>
-                    )}
+                    {req.status === "PENDING" && <p>Your request has been sent to the donor. Waiting for their response.</p>}
+                    {req.status === "APPROVED" && <p>The blood bank admin approved this request.</p>}
+                    {req.status === "ACCEPTED" && <p>🎉 The donor accepted your request. Please contact them.</p>}
+                    {req.status === "DECLINED" && <p>The request was declined. Try finding another donor.</p>}
+                    {req.status === "COMPLETED" && <p>This donation has been completed. Thank you!</p>}
                   </div>
 
                   {req.createdAt && (
