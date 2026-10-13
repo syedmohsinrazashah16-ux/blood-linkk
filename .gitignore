@@ -32,8 +32,6 @@ env/
 ENV/
 .pytest_cache/
 *.h5
-*.keras
-*.pkl
 
 # =========================
 # IDEs and OS Files
